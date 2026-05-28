@@ -93,27 +93,48 @@ public class ChatFX extends Application implements MessageContainer {
     }
 
     private void configurarEventos() {
+    	// Evento de Iniciar Conexão
         btnIniciar.setOnAction(e -> {
-            try {
-                int portaLocal = Integer.parseInt(txtPortaLocal.getText());
-                int portaRemota = Integer.parseInt(txtPortaRemota.getText());
-                String ipRemoto = txtIpRemoto.getText();
-                boolean isTCP = rbTCP.isSelected();
+            int portaLocal;
+            int portaRemota;
+            String ipRemoto = txtIpRemoto.getText();
+            boolean isTCP = rbTCP.isSelected();
 
-                sender = ChatFactory.build(isTCP, ipRemoto, portaRemota, portaLocal, this);
-                
-                btnIniciar.setDisable(true);
-                txtMensagem.setDisable(false);
-                btnEnviar.setDisable(false);
-                txtMensagem.requestFocus();
-                
-                areaMensagens.appendText("Sistema: Chat iniciado (" + (isTCP ? "TCP" : "UDP") + ").\n");
-                
+            try {
+                portaLocal = Integer.parseInt(txtPortaLocal.getText());
+                portaRemota = Integer.parseInt(txtPortaRemota.getText());
             } catch (NumberFormatException ex) {
                 mostrarAlerta("Erro de Entrada", "Verifique se as portas contêm apenas números válidos.");
-            } catch (ChatException ex) {
-                mostrarAlerta("Erro de Conexão", "Erro ao iniciar chat: " + ex.getMessage());
+                return; // Para a execução aqui se der erro
             }
+
+            // Desabilita o botão e avisa o usuário
+            btnIniciar.setDisable(true);
+            areaMensagens.appendText("Sistema: Aguardando a conexão da outra máquina...\n");
+
+            // Cria uma nova Thread (segundo plano) para não travar a interface
+            new Thread(() -> {
+                try {
+                    // Chama a API (isso aqui que travava a tela)
+                    Sender novoSender = ChatFactory.build(isTCP, ipRemoto, portaRemota, portaLocal, this);
+                    
+                    // Voltar para a Thread do JavaFX para atualizar componentes visuais
+                    Platform.runLater(() -> {
+                        sender = novoSender; // Atualiza a variável global
+                        txtMensagem.setDisable(false);
+                        btnEnviar.setDisable(false);
+                        txtMensagem.requestFocus();
+                        areaMensagens.appendText("Sistema: Chat conectado com sucesso (" + (isTCP ? "TCP" : "UDP") + ")!\n");
+                    });
+                    
+                } catch (ChatException ex) {
+                    Platform.runLater(() -> {
+                        mostrarAlerta("Erro de Conexão", "Erro ao iniciar chat: " + ex.getMessage());
+                        btnIniciar.setDisable(false); // Libera o botão para tentar de novo
+                        areaMensagens.appendText("Sistema: Falha ao conectar.\n");
+                    });
+                }
+            }).start();
         });
 
         btnEnviar.setOnAction(e -> enviarMensagem());
